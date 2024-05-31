@@ -1,0 +1,10 @@
+
+.idea/*
+*.pyc
+cmake-build-*
+*.egg-info/
+*.so
+*/build/
+/exp/
+/data/
+

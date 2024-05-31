@@ -1,0 +1,15 @@
+pyhocon==0.3.59
+icecream==2.1.3
+opencv-python==4.9.0.80
+scipy==1.10.1
+h5py==3.10.0
+open3d==0.18.0
+point_cloud_utils==0.30.4
+trimesh==4.2.2
+tensorboard==2.14.0
+torch_optimizer==0.3.0
+flow_vis==0.1
+scikit-image==0.21.0
+termcolor==2.4.0
+huggingface_hub==0.22.2
+gitpython==3.1.43
