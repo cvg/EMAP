@@ -28,8 +28,9 @@ def download_and_unzip_google_drive_files(paths, download_to="./data"):
 
 # Google Drive file paths
 paths = [
-    # "https://drive.google.com/file/d/1bajg-QrEyfOkBcNTP5ZzoaBPpR5PQF7U/view?usp=sharing",
+    "https://drive.google.com/file/d/1bajg-QrEyfOkBcNTP5ZzoaBPpR5PQF7U/view?usp=sharing",
     "https://drive.google.com/file/d/1eZZiMcTfoiYfIxtv4Wy3lQYAudZpKlE0/view?usp=sharing",
+    "https://drive.google.com/file/d/1pum-25MEFhXQu1fZLy_f9lRMBxvF1ssm/view?usp=sharing",
 ]
 
 download_to = "./data"
