@@ -11,5 +11,5 @@ torch_optimizer==0.3.0
 flow_vis==0.1
 scikit-image==0.21.0
 termcolor==2.4.0
-huggingface_hub==0.22.2
 gitpython==3.1.43
+gdown==5.2.0

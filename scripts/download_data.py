@@ -1,35 +1,36 @@
 import os
-import shutil
-import git
 import zipfile
+import gdown
 
 
-def clone_repository(url, branch="main", clone_to="./data"):
-    # Ensure the target directory exists
-    if os.path.exists(clone_to):
-        shutil.rmtree(clone_to)
-    os.makedirs(clone_to)
+def download_and_unzip_google_drive_files(paths, download_to="./data"):
+    if not os.path.exists(download_to):
+        os.makedirs(download_to)
 
-    # Clone the repository
-    print(f"Cloning the repository from branch '{branch}'...")
-    git.Repo.clone_from(url, clone_to, branch=branch)
-    print("Done!")
+    for path in paths:
+        # Convert Google Drive link to direct download link
+        file_id = path.split("/d/")[1].split("/")[0]
+        direct_link = f"https://drive.google.com/uc?id={file_id}"
 
-    # Unzip zip files directly to clone_to folder
-    for root, _, files in os.walk(clone_to):
-        for file in files:
-            if file.endswith(".zip"):
-                zip_path = os.path.join(root, file)
-                with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                    zip_ref.extractall(clone_to)
-                os.remove(zip_path)
-                print(f"Unzipped and deleted: {zip_path}")
+        print(f"Downloading from {direct_link}...")
+        output_path = os.path.join(download_to, f"{file_id}.zip")
+        gdown.download(direct_link, output_path, quiet=False)
+        print(f"Downloaded {output_path}")
 
-    print(f"Finished extracting files to: {clone_to}")
+        # Unzip the downloaded file
+        with zipfile.ZipFile(output_path, "r") as zip_ref:
+            zip_ref.extractall(download_to)
+        os.remove(output_path)
+        print(f"Unzipped and deleted: {output_path}")
+
+    print(f"Finished extracting files to: {download_to}")
 
 
-url = "https://huggingface.co/datasets/rayeeli/EMAP.git"
-branch = "main"
-clone_to = "./data"
+# Google Drive file paths
+paths = [
+    # "https://drive.google.com/file/d/1bajg-QrEyfOkBcNTP5ZzoaBPpR5PQF7U/view?usp=sharing",
+    "https://drive.google.com/file/d/1eZZiMcTfoiYfIxtv4Wy3lQYAudZpKlE0/view?usp=sharing",
+]
 
-clone_repository(url, branch, clone_to)
+download_to = "./data"
+download_and_unzip_google_drive_files(paths, download_to)

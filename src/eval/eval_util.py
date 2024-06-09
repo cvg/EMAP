@@ -3,8 +3,20 @@ import numpy as np
 import json
 import point_cloud_utils as pcu
 import math
+import random
+from pathlib import Path
 
 
+def set_random_seeds(seed=42):
+    np.random.seed(seed)
+    random.seed(seed)
+
+def load_from_json(filename: Path):
+    """Load a dictionary from a JSON filename."""
+    assert filename.suffix == ".json"
+    with open(filename, encoding="UTF-8") as file:
+        return json.load(file)
+    
 def chamfer_distance(x, y, return_index=False, p_norm=2, max_points_per_leaf=10):
     """
     Compute the chamfer distance between two point clouds x, and y
@@ -306,7 +318,6 @@ def get_pred_points_and_directions(
     if num_curves > 0:
         for i, each_curve in enumerate(curves_ctl_pts):
             each_curve = np.array(each_curve).reshape(4, 3)  # shape: (4, 3)
-            # sample_num = int(np.linalg.norm(each_curve[0] - each_curve[-1]) // 0.01)
             sample_num = int(
                 bezier_curve_length(each_curve, num_samples=100) // sample_resolution
             )
@@ -323,13 +334,11 @@ def get_pred_points_and_directions(
                 np.matmul(matrix_u.T, matrix_middle), each_curve
             ).reshape(sample_num, 3)
 
-            # curve_points_flatten = matrix.reshape(-1)
             all_curve_points += matrix.tolist()
 
             # Calculate the curve directions (derivatives)
             derivative_u = 3 * t**2
             derivative_v = 2 * t
-            # derivative_constant = np.ones_like(t)
 
             # Derivative matrices for x, y, z
             dx = (
@@ -392,13 +401,11 @@ def get_pred_points_and_directions(
             matrix_l = np.matmul(
                 np.matmul(matrix_u_l.T, matrix_middle_l), each_line
             ).reshape(sample_num, 3)
-            # line_points = matrix_l.transpose(0, 1)
-            # line_points_flatten = matrix_l.reshape(-1)
             all_line_points += matrix_l.tolist()
 
             # Calculate the direction vector for the line segment
             direction = each_line[1] - each_line[0]
-            norm_direction = direction / np.linalg.norm(direction)
+            norm_direction = direction / (np.linalg.norm(direction) + 1e-6)
 
             for point in matrix_l:
                 all_line_directions.append(norm_direction)

@@ -1,10 +1,9 @@
 import os
 import numpy as np
-import json
 import argparse
-import random
-from pathlib import Path
 from src.eval.eval_util import (
+    set_random_seeds,
+    load_from_json,
     compute_chamfer_distance,
     f_score,
     compute_precision_recall_IOU,
@@ -12,18 +11,6 @@ from src.eval.eval_util import (
     get_gt_points,
     get_pred_points_and_directions,
 )
-
-
-def load_from_json(filename: Path):
-    """Load a dictionary from a JSON filename."""
-    assert filename.suffix == ".json"
-    with open(filename, encoding="UTF-8") as file:
-        return json.load(file)
-
-
-def set_random_seeds(seed=42):
-    np.random.seed(seed)
-    random.seed(seed)
 
 
 def update_totals_and_metrics(metrics, totals, results, edge_type):
@@ -166,7 +153,7 @@ def main(base_dir, dataset_dir, exp_name):
         },
     }
 
-    with open("src/eval/eval_scans.txt", "r") as f:
+    with open("src/eval/ABC_scans.txt", "r") as f:
         scan_names = [line.strip() for line in f]
 
     for scan_name in scan_names:
