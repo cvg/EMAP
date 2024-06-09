@@ -42,7 +42,7 @@ pip install -r requirements.txt
 ```
 
 ## Datasets
-Download datasets from [huggingface](https://huggingface.co/datasets/rayeeli/EMAP):
+Download datasets:
 ```
 python scripts/download_data.py 
 ```
