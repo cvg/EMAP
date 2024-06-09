@@ -2,9 +2,8 @@ import os
 import numpy as np
 import json
 import argparse
-from pathlib import Path
-import json
 import random
+from pathlib import Path
 from src.eval.eval_util import (
     compute_chamfer_distance,
     f_score,
@@ -16,56 +15,112 @@ from src.eval.eval_util import (
 
 
 def load_from_json(filename: Path):
-    """Load a dictionary from a JSON filename.
-
-    Args:
-        filename: The filename to load from.
-    """
+    """Load a dictionary from a JSON filename."""
     assert filename.suffix == ".json"
     with open(filename, encoding="UTF-8") as file:
         return json.load(file)
 
 
 def set_random_seeds(seed=42):
-    # Set the random seed for NumPy
     np.random.seed(seed)
-
-    # Set the random seed for the random module
     random.seed(seed)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Process CAD data and compute metrics."
+def update_totals_and_metrics(metrics, totals, results, edge_type):
+    correct_gt, num_gt, correct_pred, num_pred, acc, comp = results
+    metrics[f"comp_{edge_type}"].append(comp)
+    metrics[f"acc_{edge_type}"].append(acc)
+    for i, threshold in enumerate(["5", "10", "20"]):
+        totals[f"thre{threshold}_correct_gt_total"] += correct_gt[i]
+        totals[f"thre{threshold}_correct_pred_total"] += correct_pred[i]
+    totals["num_gt_total"] += num_gt
+    totals["num_pred_total"] += num_pred
+
+
+def finalize_metrics(metrics):
+    for key, value in metrics.items():
+        value = np.array(value)
+        value[np.isnan(value)] = 0
+        metrics[key] = round(np.mean(value), 4)
+    return metrics
+
+
+def print_metrics(metrics, totals, edge_type):
+    print(f"{edge_type.capitalize()}:")
+    print(f"  Completeness: {metrics[f'comp_{edge_type}']}")
+    print(f"  Accuracy: {metrics[f'acc_{edge_type}']}")
+
+
+def process_scan(scan_name, base_dir, exp_name, dataset_dir, metrics, totals):
+    print(f"Processing: {scan_name}")
+    json_path = os.path.join(
+        base_dir, scan_name, exp_name, "results", "parametric_edges.json"
     )
-    parser.add_argument(
-        "--base_dir",
-        type=str,
-        default="./exp/ABC",
+    if not os.path.exists(json_path):
+        print(f"Invalid prediction at {scan_name}")
+        return
+
+    all_curve_points, all_line_points, all_curve_directions, all_line_directions = (
+        get_pred_points_and_directions(json_path)
     )
-    parser.add_argument(
-        "--dataset_dir",
-        type=str,
-        default="./data/ABC-NEF_Edge",
-    )
-    parser.add_argument(
-        "--exp_name",
-        type=str,
-        default="emap",
+    pred_points = (
+        np.concatenate([all_curve_points, all_line_points], axis=0)
+        .reshape(-1, 3)
+        .astype(np.float32)
     )
 
-    args = parser.parse_args()
-    base_dir = args.base_dir
-    dataset_dir = args.dataset_dir
-    exp_name = args.exp_name
+    if len(pred_points) == 0:
+        print(f"Invalid prediction at {scan_name}")
+        return
 
+    pred_sampled = downsample_point_cloud_average(
+        pred_points,
+        num_voxels_per_axis=256,
+        min_bound=[-1, -1, -1],
+        max_bound=[1, 1, 1],
+    )
+
+    gt_points_raw, gt_points, _ = get_gt_points(
+        scan_name, "all", data_base_dir=os.path.join(dataset_dir, "groundtruth")
+    )
+    if gt_points_raw is None:
+        return
+
+    chamfer_dist, acc, comp = compute_chamfer_distance(pred_sampled, gt_points)
+    print(
+        f"  Chamfer Distance: {chamfer_dist:.4f}, Accuracy: {acc:.4f}, Completeness: {comp:.4f}"
+    )
+    metrics["chamfer"].append(chamfer_dist)
+    metrics["acc"].append(acc)
+    metrics["comp"].append(comp)
+    metrics = compute_precision_recall_IOU(
+        pred_sampled,
+        gt_points,
+        metrics,
+        thresh_list=[0.005, 0.01, 0.02],
+        edge_type="all",
+    )
+
+    for edge_type in ["curve", "line"]:
+        gt_points_raw_edge, gt_points_edge, _ = get_gt_points(
+            scan_name,
+            edge_type,
+            return_direction=True,
+            data_base_dir=os.path.join(dataset_dir, "groundtruth"),
+        )
+        if gt_points_raw_edge is not None:
+            results = compute_precision_recall_IOU(
+                pred_sampled,
+                gt_points_edge,
+                None,
+                thresh_list=[0.005, 0.01, 0.02],
+                edge_type=edge_type,
+            )
+            update_totals_and_metrics(metrics, totals[edge_type], results, edge_type)
+
+
+def main(base_dir, dataset_dir, exp_name):
     set_random_seeds()
-    metrics_total = {}
-
-    with open("eval/eval_scans.txt", "r") as f:
-        scan_names = f.readlines()
-
-    scan_names = [each.replace("\n", "") for each in scan_names]
     metrics = {
         "chamfer": [],
         "acc": [],
@@ -88,243 +143,78 @@ if __name__ == "__main__":
         "IOU_0.005": [],
     }
 
-    (
-        thre5_correct_gt_total_curve,
-        thre10_correct_gt_total_curve,
-        thre20_correct_gt_total_curve,
-        thre5_correct_pred_total_curve,
-        thre10_correct_pred_total_curve,
-        thre20_correct_pred_total_curve,
-    ) = (0, 0, 0, 0, 0, 0)
-    num_gt_total_curve = 0
-    num_pred_total_curve = 0
+    totals = {
+        "curve": {
+            "thre5_correct_gt_total": 0,
+            "thre10_correct_gt_total": 0,
+            "thre20_correct_gt_total": 0,
+            "thre5_correct_pred_total": 0,
+            "thre10_correct_pred_total": 0,
+            "thre20_correct_pred_total": 0,
+            "num_gt_total": 0,
+            "num_pred_total": 0,
+        },
+        "line": {
+            "thre5_correct_gt_total": 0,
+            "thre10_correct_gt_total": 0,
+            "thre20_correct_gt_total": 0,
+            "thre5_correct_pred_total": 0,
+            "thre10_correct_pred_total": 0,
+            "thre20_correct_pred_total": 0,
+            "num_gt_total": 0,
+            "num_pred_total": 0,
+        },
+    }
 
-    (
-        thre5_correct_gt_total_line,
-        thre10_correct_gt_total_line,
-        thre20_correct_gt_total_line,
-        thre5_correct_pred_total_line,
-        thre10_correct_pred_total_line,
-        thre20_correct_pred_total_line,
-    ) = (0, 0, 0, 0, 0, 0)
-    num_gt_total_line = 0
-    num_pred_total_line = 0
-    line_normal_similarities_list = []
-    curve_normal_similarities_list = []
+    with open("src/eval/eval_scans.txt", "r") as f:
+        scan_names = [line.strip() for line in f]
 
-    for i, scan_name in enumerate(scan_names):
-        print("Processing:", scan_name)
-        json_path = os.path.join(
-            base_dir,
-            scan_name,
-            exp_name,
-            "results",
-            "parametric_edges.json",
-        )
-        if not os.path.exists(json_path):
-            print("invalid prediction at {}".format(scan_name))
-            continue
+    for scan_name in scan_names:
+        process_scan(scan_name, base_dir, exp_name, dataset_dir, metrics, totals)
 
-        all_curve_points, all_line_points, all_curve_directions, all_line_directions = (
-            get_pred_points_and_directions(json_path)
-        )
-        # pred_points = np.array(pred_points).reshape(-1, 3)
-        pred_points = (
-            np.concatenate([all_curve_points, all_line_points], axis=0)
-            .reshape(-1, 3)
-            .astype(np.float32)
-        )
+    metrics = finalize_metrics(metrics)
 
-        if len(pred_points) == 0:
-            print("invalid prediction at {}".format(scan_name))
-            continue
+    print("Summary:")
+    print(f"  Accuracy: {metrics['acc']:.4f}")
+    print(f"  Completeness: {metrics['comp']:.4f}")
+    print(f"  Recall @ 5 mm: {metrics['recall_0.005']:.4f}")
+    print(f"  Recall @ 10 mm: {metrics['recall_0.01']:.4f}")
+    print(f"  Recall @ 20 mm: {metrics['recall_0.02']:.4f}")
+    print(f"  Precision @ 5 mm: {metrics['precision_0.005']:.4f}")
+    print(f"  Precision @ 10 mm: {metrics['precision_0.01']:.4f}")
+    print(f"  Precision @ 20 mm: {metrics['precision_0.02']:.4f}")
+    print(f"  F-Score @ 5 mm: {metrics['fscore_0.005']:.4f}")
+    print(f"  F-Score @ 10 mm: {metrics['fscore_0.01']:.4f}")
+    print(f"  F-Score @ 20 mm: {metrics['fscore_0.02']:.4f}")
 
-        pred_sampled = downsample_point_cloud_average(
-            pred_points,
-            num_voxels_per_axis=256,
-            min_bound=[-1, -1, -1],
-            max_bound=[1, 1, 1],
-        )
+    if totals["curve"]["num_gt_total"] > 0:
+        print_metrics(metrics, totals["curve"], "curve")
+    else:
+        print("Curve: No ground truth edges found.")
 
-        #### all edges
-        gt_points_raw, gt_points, _ = get_gt_points(
-            scan_name, "all", data_base_dir=os.path.join(dataset_dir, "groundtruth")
-        )
-        if gt_points_raw is None:
-            continue
-        chamfer_dist, acc, comp = compute_chamfer_distance(pred_sampled, gt_points)
-        print("chamfer:", chamfer_dist, "acc:", acc, "comp:", comp)
-        metrics["chamfer"].append(chamfer_dist)
-        metrics["acc"].append(acc)
-        metrics["comp"].append(comp)
-        metrics = compute_precision_recall_IOU(
-            pred_sampled,
-            gt_points,
-            metrics,
-            thresh_list=[0.005, 0.01, 0.02],
-            edge_type="all",
-        )
+    if totals["line"]["num_gt_total"] > 0:
+        print_metrics(metrics, totals["line"], "line")
+    else:
+        print("Line: No ground truth edges found.")
 
-        #### curve and line
-        gt_points_raw_curve, gt_points_curve, gt_curve_normals = get_gt_points(
-            scan_name,
-            "curve",
-            return_direction=True,
-            data_base_dir=os.path.join(dataset_dir, "groundtruth"),
-        )
-        if gt_points_raw_curve is not None:
-            (
-                correct_gt_curve,
-                num_gt_curve,
-                correct_pred_curve,
-                num_pred_curve,
-                acc_curve,
-                comp_curve,
-            ) = compute_precision_recall_IOU(
-                pred_sampled,
-                gt_points_curve,
-                None,
-                thresh_list=[0.005, 0.01, 0.02],
-                edge_type="curve",
-            )
-            metrics["comp_curve"].append(comp_curve)
-            metrics["acc_curve"].append(acc_curve)
-            thre5_correct_gt_total_curve += correct_gt_curve[0]
-            thre10_correct_gt_total_curve += correct_gt_curve[1]
-            thre20_correct_gt_total_curve += correct_gt_curve[2]
-            num_gt_total_curve += num_gt_curve
 
-            thre5_correct_pred_total_curve += correct_pred_curve[0]
-            thre10_correct_pred_total_curve += correct_pred_curve[1]
-            thre20_correct_pred_total_curve += correct_pred_curve[2]
-            num_pred_total_curve += num_pred_curve
-
-            # curve_normal_similarity = compute_direction_similarity(
-            #     gt_points_curve,
-            #     gt_curve_normals,
-            #     pred_sampled,
-            #     directions,
-            # )
-            # print("curve normal similarity:", curve_normal_similarity)
-            # curve_normal_similarities_list.append(curve_normal_similarity)
-
-        gt_points_raw_line, gt_points_line, gt_line_normals = get_gt_points(
-            scan_name,
-            "line",
-            return_direction=True,
-            data_base_dir=os.path.join(dataset_dir, "groundtruth"),
-        )
-        if gt_points_raw_line is not None:
-            (
-                correct_gt_line,
-                num_gt_line,
-                correct_pred_line,
-                num_pred_line,
-                acc_line,
-                comp_line,
-            ) = compute_precision_recall_IOU(
-                pred_sampled,
-                gt_points_line,
-                None,
-                thresh_list=[0.005, 0.01, 0.02],
-                edge_type="line",
-            )
-            metrics["comp_line"].append(comp_line)
-            metrics["acc_line"].append(acc_line)
-            thre5_correct_gt_total_line += correct_gt_line[0]
-            thre10_correct_gt_total_line += correct_gt_line[1]
-            thre20_correct_gt_total_line += correct_gt_line[2]
-            num_gt_total_line += num_gt_line
-
-            thre5_correct_pred_total_line += correct_pred_line[0]
-            thre10_correct_pred_total_line += correct_pred_line[1]
-            thre20_correct_pred_total_line += correct_pred_line[2]
-            num_pred_total_line += num_pred_line
-
-            # line_normal_similarity = compute_direction_similarity(
-            #     gt_points_line,
-            #     gt_line_normals,
-            #     pred_sampled,
-            #     directions,
-            # )
-            # print("line normal similarity:", line_normal_similarity)
-            # line_normal_similarities_list.append(line_normal_similarity)
-
-    for key, value in metrics.items():
-        value = np.array(value)
-        value[np.isnan(value)] = 0
-        metrics[key] = round(np.mean(value), 4)
-
-    print("All:")
-    print("acc: ", metrics["acc"], "comp: ", metrics["comp"])
-    print(
-        "r5: ",
-        metrics["recall_0.005"],
-        "r10: ",
-        metrics["recall_0.01"],
-        "r20: ",
-        metrics["recall_0.02"],
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Process CAD data and compute metrics."
     )
-    print(
-        "p5: ",
-        metrics["precision_0.005"],
-        "p10: ",
-        metrics["precision_0.01"],
-        "p20: ",
-        metrics["precision_0.02"],
+    parser.add_argument(
+        "--base_dir",
+        type=str,
+        default="./exp/ABC",
+        help="Base directory for experiments",
     )
-    print(
-        "f5: ",
-        metrics["fscore_0.005"],
-        "f10: ",
-        metrics["fscore_0.01"],
-        "f20: ",
-        metrics["fscore_0.02"],
+    parser.add_argument(
+        "--dataset_dir",
+        type=str,
+        default="./data/ABC-NEF_Edge",
+        help="Directory for the dataset",
     )
+    parser.add_argument("--exp_name", type=str, default="emap", help="Experiment name")
 
-    print("Curve:")
-
-    print("recall_0.005: ", 1.0 * thre5_correct_gt_total_curve / num_gt_total_curve)
-    print("recall_0.01: ", 1.0 * thre10_correct_gt_total_curve / num_gt_total_curve)
-    print("recall_0.02: ", 1.0 * thre20_correct_gt_total_curve / num_gt_total_curve)
-    print("Curve completeness: ", metrics["comp_curve"])
-    print(
-        "precision_0.005: ", 1.0 * thre5_correct_pred_total_curve / num_pred_total_curve
-    )
-    print(
-        "precision_0.01: ", 1.0 * thre10_correct_pred_total_curve / num_pred_total_curve
-    )
-    print(
-        "precision_0.02: ", 1.0 * thre20_correct_pred_total_curve / num_pred_total_curve
-    )
-    print("Curve accuracy: ", metrics["acc_curve"])
-    print(
-        "f-score_0.005: ",
-        f_score(
-            1.0 * thre5_correct_pred_total_curve / num_pred_total_curve,
-            1.0 * thre5_correct_gt_total_curve / num_gt_total_curve,
-        ),
-    )
-
-    print("Line:")
-    print("recall_0.005: ", 1.0 * thre5_correct_gt_total_line / num_gt_total_line)
-    print("recall_0.01: ", 1.0 * thre10_correct_gt_total_line / num_gt_total_line)
-    print("recall_0.02: ", 1.0 * thre20_correct_gt_total_line / num_gt_total_line)
-    print("Line completeness: ", metrics["comp_line"])
-    print(
-        "precision_0.005: ", 1.0 * thre5_correct_pred_total_line / num_pred_total_line
-    )
-    print(
-        "precision_0.01: ", 1.0 * thre10_correct_pred_total_line / num_pred_total_line
-    )
-    print(
-        "precision_0.02: ", 1.0 * thre20_correct_pred_total_line / num_pred_total_line
-    )
-    print("Line accuracy: ", metrics["acc_line"])
-    print(
-        "f-score_0.005: ",
-        f_score(
-            1.0 * thre5_correct_pred_total_line / num_pred_total_line,
-            1.0 * thre5_correct_gt_total_line / num_gt_total_line,
-        ),
-    )
+    args = parser.parse_args()
+    main(args.base_dir, args.dataset_dir, args.exp_name)
