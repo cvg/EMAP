@@ -65,7 +65,7 @@ The data is organized as follows:
     ...
 ```
 
-## Training and Evaluation
+## Training and Edge Extraction
 To train and extract edges on different datasets, use the following commands:
 
 #### ABC-NEF_Edge Dataset
@@ -81,6 +81,14 @@ bash scripts/run_Replica.bash
 #### DTU_Edge Dataset
 ```
 bash scripts/run_DTU.bash
+```
+
+## Evaluation
+To evaluate extracted edges on ABC-NEF_Edge dataset, use the following commands:
+
+#### ABC-NEF_Edge Dataset
+```
+python src/eval/eval_ABC.py
 ```
 
 ## Code Release Status
