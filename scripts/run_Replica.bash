@@ -11,7 +11,7 @@ export PYTHONPATH=.
 export CUDA_VISIBLE_DEVICES=0
 
 # Train UDF field
-# python main.py --conf ./confs/Replica.conf --mode train
+python main.py --conf ./confs/Replica.conf --mode train
 
 # Extract parametric edges
 python main.py --conf ./confs/Replica.conf --mode extract_edge
