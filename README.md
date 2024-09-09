@@ -16,7 +16,7 @@
     <a href="https://people.inf.ethz.ch/pomarc/"><strong>Marc Pollefeys</strong></a>
   </p>
   <h2 align="center">CVPR 2024</h2>
-  <h3 align="center"><a href="https://arxiv.org/pdf/2405.19295">Paper</a> | <a href="https://youtu.be/ONXfu2b4Nug">Video</a> | <a href="https://neural-edge-map.github.io/">Project Page</a></h3>
+  <h3 align="center"><a href="https://openaccess.thecvf.com/content/CVPR2024/papers/Li_3D_Neural_Edge_Reconstruction_CVPR_2024_paper.pdf">Paper</a> | <a href="https://youtu.be/ONXfu2b4Nug">Video</a> | <a href="https://neural-edge-map.github.io/">Project Page</a></h3>
 </p>
 
 <p align="center" style="display: flex; justify-content: center;">
@@ -83,6 +83,9 @@ bash scripts/run_Replica.bash
 bash scripts/run_DTU.bash
 ```
 
+### Checkpoints
+We have uploaded the model checkpoints on [Google Drive](https://drive.google.com/file/d/1kU87MqDv5IvwjCt8I8KecTlIok39fuws/view?usp=sharing). 
+
 ## Evaluation
 To evaluate extracted edges on ABC-NEF_Edge dataset, use the following commands:
 
@@ -101,7 +104,7 @@ python src/eval/eval_ABC.py
 
 Shield: [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-The majority of EMAP is licensed under a [MIT License](LICENSE).
+The majority of EMAP is licensed under a [MIT License](LICENSE.txt).
 
 ## <a name="CitingEMAP"></a>Citing EMAP
 
