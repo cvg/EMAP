@@ -50,8 +50,8 @@ class Runner_UDF(Runner):
             g["lr"] = self.learning_rate
 
         beta_flag = True
-        psnr_list = []
-        self.best_psnr = 0.0
+        loss_list = []
+        self.best_loss = 1.0
 
         # tqdm with discription of loss
         par = tqdm(
@@ -132,7 +132,7 @@ class Runner_UDF(Runner):
             psnr = 20.0 * torch.log10(
                 1.0 / (((edge - true_edge) ** 2 * mask).sum() / (mask_sum)).sqrt()
             )
-            psnr_list.append(psnr)
+            loss_list.append(edge_loss)
 
             # Eikonal loss
             gradient_error_loss = gradient_error
@@ -236,12 +236,12 @@ class Runner_UDF(Runner):
 
                 ic(self.get_flip_saturation())
 
-            if self.iter_step % 100 == 0 and self.iter_step > 0:
-                psnr_avg = sum(psnr_list) / len(psnr_list)
-                psnr_list = []
+            if self.iter_step % 500 == 0 and self.iter_step > 0:
+                loss_avg = sum(loss_list) / len(loss_list)
+                loss_list = []
 
             if self.iter_step % self.save_freq == 0:
-                self.save_checkpoint(psnr_avg)
+                self.save_checkpoint(loss_avg)
 
             if self.iter_step % self.val_freq == 0:
                 self.validate()
@@ -262,7 +262,7 @@ class Runner_UDF(Runner):
 
         logging.info("End")
 
-    def save_checkpoint(self, psnr_val):
+    def save_checkpoint(self, loss_val):
         checkpoint_dir = os.path.join(self.base_exp_dir, "checkpoints")
         os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -274,11 +274,11 @@ class Runner_UDF(Runner):
             "iter_step": self.iter_step,
         }
 
-        if psnr_val > self.best_psnr:
-            self.best_psnr = psnr_val
+        if loss_val < self.best_loss:
+            self.best_loss = loss_val
             logging.info(
-                "Save checkpoint with the best PSNR: {:.2f} in ckpt_best.pth".format(
-                    self.best_psnr
+                "Save checkpoint with the best loss: {:.2f} in ckpt_best.pth".format(
+                    self.best_loss
                 )
             )
             best_checkpoint_path = os.path.join(checkpoint_dir, "ckpt_best.pth")
